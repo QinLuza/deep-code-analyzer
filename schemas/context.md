@@ -76,6 +76,17 @@
       "entry_points": {},
       "design_principles": [],
       "key_dirs": [],
+      "docs_map": {
+        "docs_root": "",
+        "docs_source_type": "",
+        "tree": [],
+        "read_budget": {},
+        "declared_tech_stack": {},
+        "declared_modules": [],
+        "declared_architecture": [],
+        "glossary": [],
+        "drift_signals": []
+      },
       "anomaly_signals": [],
       "assumptions": []
     },
@@ -203,6 +214,7 @@
 - `S6_feature_studies` 与 `S6_history` 同理
 - `S6B_defect_scans` 与 `S6B_history` 同理；S6B 为可选阶段，`human_decisions.defect_scan_enabled` 为 `false` 时两者恒为空数组
 - `S1_landscape.design_principles` 是结构化的 `[{principle, evidence_in_readme, reflected_in_code}]` 数组，不再是自由文本
+- `S1_landscape.docs_map` 为 **Docs 优先侦察**产物：`tree` 为文档结构树（2 层）、`declared_tech_stack`/`declared_modules` 为文档声明的技术栈与模块划分（S2 的"预期基线"）、`glossary` 为关键术语表（≤ 20 条）、`drift_signals` 为文档-源码漂移信号（`[必挖]` 级进入 S5 深挖候选）；项目无文档目录时置 `null` 并在 `assumptions` 记录
 - `S1_landscape.anomaly_signals` 为高价值深度分析目标列表（超大文件、深嵌套、循环依赖等），每条含 `priority`（`[必挖]`/`[可选]`）；`[必挖]` 信号在人工介入点强制进入 S5 深挖候选（可显式跳过并记录理由）
 - `S3_dataflow.unverified_hypotheses` 存储假设验证表，每个假设含 `hypothesis → evidence → explanation → confidence → verify_action`
 - `unreachable_paths` 用于 S3 和 S5 中无法验证源码路径的环节，必须逐条说明原因

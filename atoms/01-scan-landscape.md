@@ -42,14 +42,41 @@
 
    若以上声明文件均不存在且项目有多个一级源码目录，将非工具/非文档的一级源码目录列为 candidate_modules，标注 `confidence: low`。
 
-### 步骤 2：设计原则提取（结构化）
-从 README 或其他项目文档中提取设计原则，每条原则标注以下结构：
+### 步骤 2：Docs 优先侦察（框架认知地图）
+> 原则：**文档先行，源码对照**。项目存在文档目录时，先读文档建立框架认知，再以文档声明的结构为"预期基线"解剖源码——避免在源码中盲搜，节约 token 且方向明确。文档与源码不符处本身就是高价值异常信号。
+
+1. **文档目录探测**：按优先级检查以下目录是否存在（取首个命中）：
+   - `docs/` → `documentation/` → `doc/` → `wiki/`
+   - 文档站源码标记（`mkdocs.yml`、`docusaurus.config.js`、`docs/.vitepress/`、Sphinx `conf.py`）存在时仍按文档处理，但跳过其构建输出子目录（`site/`、`_build/`、`build/`、`dist/`）
+   - 均不存在 → `docs_map` 置 `null`，在 `assumptions` 记录"项目无独立文档目录"，跳过本步骤其余内容
+2. **文档读取三级分层**（控制 token 的核心机制）：
+
+   | 层级 | 内容 | 读取方式 |
+   |------|------|----------|
+   | L1 必读 | 文档目录树（2 层）+ 根级索引（`index.md`、`README.md`、`SUMMARY.md`、`_sidebar.md`、`toc.md`、`intro.md`） | 全读（索引文档均为小文件，不占预算） |
+   | L2 按需精读 | 架构/设计/规范类（`architecture/`、`design/`、`spec/`、`adr/`）+ 入门/指南类（`getting-started`、`guide/`、`tutorial/`、`how-to/`） | 按相关性精读 |
+   | L3 标题扫描 | 其余（`api/`、`reference/`、`changelog`、`news/`） | 仅列文件名 + 首行标题，不深入 |
+
+   - **读取预算硬上限**：L2+L3 合计读取 ≤ 10 个文档文件；单文档 > 400 行时只读前 400 行 + 章节标题（`^#{1,4} ` 正则提取）；超出预算的部分只扫标题，不读正文
+3. **从文档提取四项先验**（全部写入 `docs_map`）：
+   - `declared_tech_stack`：文档声明的语言/框架/数据库/部署方式（与步骤 1 配置文件提取结果交叉验证）
+   - `declared_modules`：文档声明的模块/子系统划分清单——**这是 S2 模块映射的预期基线**，S2 以它为"应有清单"逐一对照源码实际
+   - `declared_architecture`：文档描述的架构分层、核心数据流概念、关键设计决策（含 ADR 位置）
+   - `glossary`：文档定义的关键术语表（≤ 20 条，超出取前 20 条）
+4. **文档漂移预检**（轻量，不深挖）：将 `declared_modules` / `declared_tech_stack` 与步骤 1 的目录枚举 + 配置文件对照：
+   - 文档声明存在但源码目录/配置缺失的模块 → 记入 `docs_map.drift_signals`（`priority: [必挖]`）
+   - 源码存在但文档完全未提及的一级目录 → 记入 `docs_map.drift_signals`（`priority: [可选]`）
+   - 漂移结论标注 `confidence: medium`（仅依据目录/配置表面对照，未深入源码），并在步骤 4 同步登记为 `anomaly_signals`（`ref: docs_map.drift_signals[i]`）
+5. **输出**：写入 `Context.stage_outputs.S1_landscape.docs_map`（结构见下方输出契约）
+
+### 步骤 3：设计原则提取（结构化）
+从 README 与步骤 2 已读文档中提取设计原则，每条原则标注以下结构：
 - `principle`：原则描述（一句话）
 - `evidence_in_readme`：README 中的原文引用（文件路径:行号）
 - `reflected_in_code`：初步判断该原则是否在源码中得到贯彻（`true | false | unverified`）
 - 如果 README 无设计原则，`evidence_in_readme` 标注 `[NOT_DOCUMENTED]`，`reflected_in_code` 标注 `unverified`
 
-### 步骤 3：异常信号扫描（高价值深挖目标识别）
+### 步骤 4：异常信号扫描（高价值深挖目标识别）
 扫描以下异常信号，记录到 `anomaly_signals`，并给每条信号标注优先级 `priority`：
 1. **超大文件**（`[必挖]`）：统计各关键目录中超过 1500 行的单文件
 2. **深嵌套结构**（`[可选]`）：检查目录嵌套深度 ≥ 5 级的路径
@@ -104,6 +131,23 @@
       "reflected_in_code": "unverified"
     }
   ],
+  "docs_map": {
+    "docs_root": "docs/",
+    "docs_source_type": "mkdocs",
+    "tree": ["docs/index.md", "docs/architecture/overview.md", "docs/guide/getting-started.md", "docs/api/rest.md"],
+    "read_budget": { "l2_l3_read_files": 7, "cap": 10, "over_budget_headings_only": true },
+    "declared_tech_stack": { "languages": ["Python 3.11", "TypeScript 5.x"], "framework": "FastAPI + Vue 3", "database": "SQLite + ChromaDB" },
+    "declared_modules": [
+      { "name": "gateway", "declared_path": "src/opensquilla/gateway/", "status": "confirmed" },
+      { "name": "webui", "declared_path": "opensquilla-webui/", "status": "confirmed" },
+      { "name": "desktop", "declared_path": "desktop/", "status": "missing", "confidence": "medium" }
+    ],
+    "declared_architecture": ["微内核插件架构", "Provider 抽象层", "本地优先存储"],
+    "glossary": ["MCP: 模型上下文协议", "Provider: 模型服务提供方"],
+    "drift_signals": [
+      { "declared": "desktop 模块", "status": "missing_in_source", "priority": "[必挖]", "confidence": "medium" }
+    ]
+  },
   "key_dirs": ["src/", "opensquilla-webui/", "desktop/", "docs/", "migrations/"],
   "module_declarations": {
     "source_file": "settings.gradle.kts",
